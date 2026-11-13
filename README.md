@@ -2,6 +2,8 @@
 
 Giao diện web (mini AWS Management Console) để quản lý tài nguyên trên **AWS Emulator** chạy local: S3, DynamoDB, SQS, Lambda, API Gateway, Step Functions, EventBridge, SNS, CloudWatch, Secrets Manager, SSM, Cognito, KMS, CodeBuild, CodePipeline.
 
+![AWS Local Console - Overview](docs/overview.png)
+
 ```
 Browser (Vite :5173) ──/api──▶ Express proxy (:3001) ──AWS SDK v3──▶ AWS Emulator (Docker, https://127.0.0.1:9297)
 ```
