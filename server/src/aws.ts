@@ -24,6 +24,15 @@ import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-
 import { KMSClient } from '@aws-sdk/client-kms';
 import { CodeBuildClient } from '@aws-sdk/client-codebuild';
 import { CodePipelineClient } from '@aws-sdk/client-codepipeline';
+import { IAMClient } from '@aws-sdk/client-iam';
+import { STSClient } from '@aws-sdk/client-sts';
+import { EC2Client } from '@aws-sdk/client-ec2';
+import { ECRClient } from '@aws-sdk/client-ecr';
+import { ECSClient } from '@aws-sdk/client-ecs';
+import { KinesisClient } from '@aws-sdk/client-kinesis';
+import { RDSClient } from '@aws-sdk/client-rds';
+import { ElastiCacheClient } from '@aws-sdk/client-elasticache';
+import { CloudFrontClient } from '@aws-sdk/client-cloudfront';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -174,6 +183,15 @@ export const secrets = mk('secrets', SecretsManagerClient);
 export const ssm = mk('ssm', SSMClient);
 export const cognito = mk('cognito', CognitoIdentityProviderClient);
 export const kms = mk('kms', KMSClient);
+export const iam = mk('iam', IAMClient);
+export const sts = mk('sts', STSClient);
+export const ec2 = mk('ec2', EC2Client);
+export const ecr = mk('ecr', ECRClient);
+export const ecs = mk('ecs', ECSClient);
+export const kinesis = mk('kinesis', KinesisClient);
+export const rds = mk('rds', RDSClient);
+export const elasticache = mk('elasticache', ElastiCacheClient);
+export const cloudfront = mk('cloudfront', CloudFrontClient);
 
 /** Bọc async handler để lỗi đi vào error middleware */
 export const wrap =

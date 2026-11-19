@@ -118,14 +118,20 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <nav className="w-60 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-[#121c29]">
           <div className="mb-2 px-3 text-xs font-bold uppercase tracking-wider text-slate-500">Services</div>
-          {[NAV, INFRA_NAV].map((group, gi) => (
+          {[
+            { title: '', items: NAV },
+            ...Array.from(new Set(INFRA_NAV.map((n) => n.group))).map((g) => ({
+              title: g,
+              items: INFRA_NAV.filter((n) => n.group === g),
+            })),
+          ].map((group, gi) => (
             <div key={gi}>
-              {gi === 1 && (
+              {group.title && (
                 <div className="mb-2 mt-4 px-3 text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Developer Tools
+                  {group.title}
                 </div>
               )}
-              {group.map(({ to, label, icon: Icon }) => (
+              {group.items.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}

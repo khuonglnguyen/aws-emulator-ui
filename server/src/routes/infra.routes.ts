@@ -15,40 +15,15 @@ import { DescribeParametersCommand, PutParameterCommand, DeleteParameterCommand 
 import { ListUserPoolsCommand, CreateUserPoolCommand, DeleteUserPoolCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { ListKeysCommand, DescribeKeyCommand, CreateKeyCommand, ScheduleKeyDeletionCommand } from '@aws-sdk/client-kms';
 import { codebuild, codepipeline, cloudwatch, logs, sfn, apigw, apigw2, events, sns, secrets, ssm, cognito, kms, wrap } from '../aws';
+import { Service, Row, date, chunk } from './infra.types';
+import { COMPUTE_SERVICES } from './infra.compute';
+import { DATA_SERVICES } from './infra.data';
 
 /**
  * Các dịch vụ dịch vụ Developer (CodeBuild, CodePipeline, CloudWatch, Step Functions, API Gateway, EventBridge, SNS, Secrets Manager, SSM, Cognito, KMS). Mỗi resource trả về
  * danh sách hàng phẳng `{ id, ...cột, raw }` để client dựng bảng + xem JSON chi tiết.
  */
-type Row = { id: string; raw: unknown; [k: string]: unknown };
-interface Field {
-  key: string;
-  label: string;
-  placeholder?: string;
-  required?: boolean;
-  multiline?: boolean;
-  options?: string[];
-}
-interface Resource {
-  id: string;
-  label: string;
-  columns: { key: string; label: string }[];
-  list: (res: Response) => Promise<Row[]>;
-  /** Tạo mới (tuỳ chọn): form field + hàm thực thi */
-  create?: { fields: Field[]; run: (res: Response, body: Record<string, string>) => Promise<unknown> };
-  /** Xóa theo row.id (tuỳ chọn) */
-  remove?: (res: Response, id: string) => Promise<unknown>;
-}
-interface Service {
-  id: string;
-  label: string;
-  resources: Resource[];
-}
-
-const date = (d?: Date | string) => (d ? new Date(d).toISOString() : '');
-const chunk = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
-
-const SERVICES: Service[] = [
+const BASE_SERVICES: Service[] = [
   {
     id: 'codebuild',
     label: 'AWS CodeBuild',
@@ -463,21 +438,57 @@ const SERVICES: Service[] = [
   },
 ];
 
+/** Mô tả ngắn cho các dịch vụ Developer có sẵn (hiện ở đầu trang dịch vụ) */
+const BASE_INFO: Record<string, { description: string; concepts?: string[] }> = {
+  codebuild: { description: 'Build, test và đóng gói mã nguồn trên máy chủ build được quản lý (chạy buildspec.yml).' },
+  codepipeline: { description: 'Tự động hóa CI/CD: Source → Build → Test → Deploy theo các stage.' },
+  cloudwatch: { description: 'Giám sát: metric, alarm và log (log group / log stream) của ứng dụng.' },
+  stepfunctions: { description: 'Điều phối workflow nhiều bước bằng state machine (Amazon States Language).' },
+  apigateway: { description: 'Tạo, publish và bảo vệ API (REST / HTTP / WebSocket) đặt trước Lambda hoặc backend.' },
+  eventbridge: { description: 'Event bus: định tuyến sự kiện theo rule (pattern hoặc lịch cron) tới target như Lambda, SQS, SNS.' },
+  sns: { description: 'Pub/Sub: publish một message, fan-out tới nhiều subscriber (SQS, Lambda, email, HTTP).' },
+  secretsmanager: { description: 'Lưu và xoay vòng secret (mật khẩu DB, API key) thay vì hard-code trong mã nguồn.' },
+  ssm: { description: 'Parameter Store: lưu cấu hình ứng dụng theo cây đường dẫn (/app/env/key), hỗ trợ SecureString.' },
+  cognito: { description: 'Xác thực và quản lý người dùng cho ứng dụng (user pool, đăng ký/đăng nhập, JWT).' },
+  kms: { description: 'Tạo và quản lý khóa mã hóa; các dịch vụ khác dùng KMS để mã hóa dữ liệu.' },
+};
+const SERVICES: Service[] = [
+  ...BASE_SERVICES.map((s) => ({ ...s, ...BASE_INFO[s.id] })),
+  ...COMPUTE_SERVICES,
+  ...DATA_SERVICES,
+];
+
 const router = Router();
 const find = (s: string, r: string) => SERVICES.find((x) => x.id === s)?.resources.find((x) => x.id === r);
 
-/** Mô tả dịch vụ/resource/cột để client tự dựng menu và bảng */
+/** Bỏ $metadata, đổi Uint8Array → text để trả JSON gọn cho client */
+const clean = (v: unknown) =>
+  v === undefined
+    ? null
+    : JSON.parse(
+        JSON.stringify(v, (k, x) => (k === '$metadata' ? undefined : x instanceof Uint8Array ? Buffer.from(x).toString('utf8') : x)),
+      );
+
+/** Mô tả dịch vụ/resource/cột/thao tác để client tự dựng menu, bảng và form */
 router.get('/meta', (_req, res) => {
   res.json(
     SERVICES.map((s) => ({
       id: s.id,
       label: s.label,
-      resources: s.resources.map(({ id, label, columns, create, remove }) => ({
+      description: s.description,
+      concepts: s.concepts,
+      resources: s.resources.map(({ id, label, description, listCli, columns, create, remove, removeCli, actions }) => ({
         id,
         label,
+        description,
+        listCli,
         columns,
-        create: create ? { fields: create.fields } : undefined,
+        create: create ? { fields: create.fields, cli: create.cli, showResult: create.showResult } : undefined,
         canDelete: !!remove,
+        removeCli,
+        actions: (actions ?? []).map(({ id, label, scope, description, fields, danger, cli }) => ({
+          id, label, scope: scope ?? 'row', description, fields, danger, cli,
+        })),
       })),
     })),
   );
@@ -503,8 +514,27 @@ router.post(
       if (f.required && !v) return res.status(400).json({ error: `Thiếu trường "${f.label}"` });
       body[f.key] = v;
     }
-    await r.create.run(res, body);
-    res.json({ ok: true });
+    const out = await r.create.run(res, body);
+    res.json({ ok: true, result: r.create.showResult ? clean(out) : undefined });
+  }),
+);
+
+/** Chạy thao tác đặc trưng: body = { id, ...fields } */
+router.post(
+  '/:service/:resource/action/:action',
+  wrap(async (req, res) => {
+    const r = find(req.params.service, req.params.resource);
+    const a = r?.actions?.find((x) => x.id === req.params.action);
+    if (!a) return res.status(404).json({ error: 'Thao tác không tồn tại' });
+    const id = String(req.body?.id ?? '');
+    if ((a.scope ?? 'row') === 'row' && !id) return res.status(400).json({ error: 'Thiếu id của dòng' });
+    const body: Record<string, string> = {};
+    for (const f of a.fields ?? []) {
+      const v = String(req.body?.[f.key] ?? '').trim();
+      if (f.required && !v) return res.status(400).json({ error: `Thiếu trường "${f.label}"` });
+      body[f.key] = v;
+    }
+    res.json({ ok: true, result: clean(await a.run(res, id, body)) });
   }),
 );
 

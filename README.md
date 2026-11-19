@@ -1,6 +1,8 @@
 # AWS Local Console
 
-Giao diện web (mini AWS Management Console) để quản lý tài nguyên trên **AWS Emulator** chạy local: S3, DynamoDB, SQS, Lambda, API Gateway, Step Functions, EventBridge, SNS, CloudWatch, Secrets Manager, SSM, Cognito, KMS, CodeBuild, CodePipeline.
+Giao diện web (mini AWS Management Console) để quản lý tài nguyên trên **AWS Emulator** chạy local: S3, DynamoDB, SQS, Lambda, API Gateway, Step Functions, EventBridge, SNS, CloudWatch, Secrets Manager, SSM, Cognito, KMS, CodeBuild, CodePipeline, **IAM, STS, EC2/VPC, ECR, ECS, Kinesis, RDS, ElastiCache, CloudFront**.
+
+Mỗi dịch vụ mới có phần **Giới thiệu** (khái niệm chính), thao tác tạo/xóa kèm các thao tác đặc trưng (menu `⋮` trên từng dòng), payload mẫu điền sẵn và **lệnh AWS CLI tương đương** hiển thị theo giá trị đang nhập để dễ học. Xem [mục 5](#5-dịch-vụ-và-thao-tác-học-tập).
 
 ![AWS Local Console - Overview](docs/overview.png)
 
@@ -151,12 +153,40 @@ npm --prefix client run preview  # xem thử bản build
 
 ---
 
-## 5. Cấu trúc thư mục
+## 5. Dịch vụ và thao tác học tập
+
+Các dịch vụ nằm ở sidebar, chia nhóm. Mỗi dịch vụ có các tab resource; bấm `⋮` trên dòng để chạy thao tác, bấm vào dòng để xem JSON chi tiết và lệnh CLI.
+
+| Dịch vụ | Resource | Thao tác đặc trưng |
+| --- | --- | --- |
+| **IAM** | Users, Roles, Policies, Groups | Attach/detach policy, create/list/delete access key, assume role, xem nội dung policy, add/remove user khỏi group |
+| **STS** | Caller identity | get-caller-identity, assume-role, get-session-token, get-access-key-info |
+| **EC2 / VPC** | Instances, VPCs, Subnets, Security groups, Key pairs | Start/stop/reboot/terminate, gắn tag, allow/revoke inbound, tạo key pair (hiện private key một lần) |
+| **ECR** | Repositories, Images | Lifecycle policy (set/get), push sample image, xóa image |
+| **ECS** | Clusters, Task definitions, Services, Tasks | Register task definition, run task, scale service, force new deployment, đổi task definition, stop task |
+| **Kinesis** | Data streams | Put record, get records (đọc từ đầu mọi shard), list shards, đổi retention |
+| **RDS** | DB instances, Snapshots, Subnet groups, Parameter groups | Stop/start/reboot, create snapshot, đổi class/storage, restore snapshot, set parameter |
+| **ElastiCache** | Cache clusters, Replication groups, Snapshots | Đổi số node, create snapshot, modify replication group |
+| **CloudFront** | Distributions, Invalidations, Cache policies, Origin access controls | Create invalidation, enable/disable, xem cấu hình, xóa (tự disable và chờ deploy) |
+
+Lưu ý khi dùng emulator:
+
+- Tài nguyên có vòng đời bất đồng bộ như AWS thật: EC2 `pending → running`, RDS/ElastiCache `creating → available`, Kinesis `CREATING → ACTIVE`. Bấm **Refresh** và chờ trạng thái sẵn sàng trước khi thao tác tiếp, nếu không sẽ nhận lỗi `not in available state`.
+- Emulator chưa hỗ trợ `DeleteReplicationGroup` và snapshot theo replication group của ElastiCache; restart container để dọn.
+- Emulator trả timestamp ECS mà AWS SDK JS không parse được. Console đã xử lý để thao tác ghi vẫn thành công, nhưng danh sách Services/Tasks có thể chỉ hiện tên và hiện `-` ở các cột trạng thái.
+- ECS launch type `EC2` cần container instance đã đăng ký; để thử nhanh hãy dùng `FARGATE` kèm subnet.
+- `assume-role` chỉ thành công khi trust policy của role cho phép bạn (ví dụ `Principal: {"AWS": "arn:aws:iam::000000000000:root"}`), trust mẫu cho Lambda sẽ trả `AccessDenied`.
+
+Thêm dịch vụ mới: khai báo `Service` trong `server/src/routes/infra*.ts` (kiểu ở `infra.types.ts`), thêm client vào `server/src/aws.ts` và mục menu vào `client/src/nav.ts`; giao diện tự dựng bảng, form, thao tác từ metadata.
+
+---
+
+## 6. Cấu trúc thư mục
 
 ```
 .
 ├── client/   # React 18 + TypeScript + Vite + Tailwind (pages, components, api.ts)
-└── server/   # Express + TypeScript (aws.ts: SDK clients & credentials, routes/: s3, dynamodb, sqs, lambda, infra)
+└── server/   # Express + TypeScript (aws.ts: SDK clients & credentials, routes/: s3, dynamodb, sqs, lambda, infra + infra.compute / infra.data)
 ```
 
 Các route API nằm dưới `/api` (`/api/health`, `/api/overview`, `/api/s3`, `/api/dynamodb`, `/api/sqs`, `/api/lambda`, `/api/infra`).
